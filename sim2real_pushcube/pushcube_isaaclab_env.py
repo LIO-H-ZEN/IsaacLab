@@ -59,7 +59,7 @@ CUBE_COLOR = (12 / 255, 42 / 255, 160 / 255)
 TARGET_RED = (194 / 255, 19 / 255, 22 / 255)
 TARGET_WHITE = (1.0, 1.0, 1.0)
 GOAL_DISC_RADII = (0.1, 0.08, 0.06, 0.04, 0.02)       # r, 4r/5, 3r/5, 2r/5, r/5
-GOAL_DISC_HEIGHTS = (1.0e-3, 1.1e-3, 1.2e-3, 1.3e-3, 1.4e-3)  # mm-scale so Isaac Sim renders them (ManiSkill uses ~1e-5 but SAPIEN renders thin geo)
+GOAL_DISC_HEIGHTS = (1.0e-3, 1.1e-3, 1.2e-3, 1.3e-3, 1.4e-3)  # mm-scale (Isaac Sim culls 1e-5-thin geo)
 GOAL_DISC_COLORS = (TARGET_RED, TARGET_WHITE, TARGET_RED, TARGET_WHITE, TARGET_RED)
 GOAL_Z = 1e-3  # target sits just above the table surface (z=0)
 # ManiSkill table (TableSceneBuilder collision box): top surface at z=0
