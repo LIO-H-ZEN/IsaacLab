@@ -67,6 +67,11 @@ TABLE_SIZE = (2.418, 1.209, 0.9196429)
 TABLE_CENTER_Z = -0.9196429 / 2  # center z so the top face is at z=0
 TABLE_COLOR = (0.55, 0.4, 0.25)  # approximate wood brown (ManiSkill uses table.glb; tune to match)
 FLOOR_Z = -0.92  # ground plane (floor) below the table
+# ManiSkill render camera (demo video only; the policy uses `camera` above).
+# look_at(eye=[0.6,0.7,0.6], target=[0,0,0.35]), 512x512, fov=1 rad.
+RENDER_EYE = (0.6, 0.7, 0.6)
+RENDER_TARGET = (0.0, 0.0, 0.35)
+RENDER_FX = 256.0 / float(np.tan(0.5))  # fx=fy for fov=1 rad @ 512px (cx=cy=256)
 
 
 @configclass
@@ -175,6 +180,22 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         offset=CameraCfg.OffsetCfg(pos=(0.3, 0.0, 0.6), rot=(0.0, 0.0, 0.0, 1.0), convention="world"),
     )
 
+    # --- render camera (512x512, fov=1; demo video only, NOT used by the policy) ---
+    camera_render = CameraCfg(
+        prim_path="{ENV_REGEX_NS}/RenderCamera",
+        update_period=0.0,
+        height=512,
+        width=512,
+        data_types=["rgb"],
+        spawn=sim_utils.PinholeCameraCfg.from_intrinsic_matrix(
+            intrinsic_matrix=[RENDER_FX, 0.0, 256.0, 0.0, RENDER_FX, 256.0, 0.0, 0.0, 1.0],
+            width=512,
+            height=512,
+            clipping_range=(0.01, 100.0),
+        ),
+        offset=CameraCfg.OffsetCfg(pos=RENDER_EYE, rot=(0.0, 0.0, 0.0, 1.0), convention="world"),
+    )
+
 
 class PushCubeIsaacLabEnv:
     """Standalone IsaacLab PushCube env matching the ManiSkill PushCube-v1 contract."""
@@ -225,6 +246,7 @@ class PushCubeIsaacLabEnv:
         self.robot = self.scene["robot"]
         self.cube = self.scene["object"]
         self.camera = self.scene["camera"]
+        self.camera_render = self.scene["camera_render"]
         self.goal_discs = [self.scene[f"goal_d{i}"] for i in range(5)]
 
         # camera pose = sapien look_at(eye=[0.3,0,0.6], target=[-0.1,0,0.1]), per env (world frame)
@@ -232,6 +254,10 @@ class PushCubeIsaacLabEnv:
         eye = self.scene.env_origins + torch.tensor([0.3, 0.0, 0.6], device=self.device)
         target = self.scene.env_origins + torch.tensor([-0.1, 0.0, 0.1], device=self.device)
         self.camera.set_world_poses_from_view(eye, target)
+        # render camera (demo) = sapien look_at([0.6,0.7,0.6], [0,0,0.35])
+        r_eye = self.scene.env_origins + torch.tensor(RENDER_EYE, device=self.device)
+        r_target = self.scene.env_origins + torch.tensor(RENDER_TARGET, device=self.device)
+        self.camera_render.set_world_poses_from_view(r_eye, r_target)
 
         # joint / body indices (resolve via names - never assume USD order)
         arm_idx_list, _ = self.robot.find_joints(ARM_NAMES, preserve_order=True)

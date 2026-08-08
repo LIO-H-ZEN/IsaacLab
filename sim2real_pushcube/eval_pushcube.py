@@ -31,6 +31,11 @@ parser.add_argument("--seed", type=int, default=0, help="random seed")
 parser.add_argument("--video", action="store_true", help="record env-0 rgb frames to a video file")
 parser.add_argument("--video_path", type=str, default="pushcube_eval.mp4", help="output video path")
 parser.add_argument("--video_episodes", type=int, default=3, help="number of env-0 episodes to record")
+parser.add_argument(
+    "--video_camera", choices=["policy", "render"], default="render",
+    help="which camera to record: 'render' matches the ManiSkill demo (front-right 45deg, 512x512); "
+         "'policy' is the 128x128 camera the policy sees",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -128,8 +133,9 @@ def main():
     # video recording: collect env-0 rgb frames for the first few episodes
     video_frames = []
     video_budget = args_cli.video_episodes * env.max_steps if args_cli.video else 0
+    video_cam = env.camera if args_cli.video_camera == "policy" else env.camera_render
     if args_cli.video and len(video_frames) < video_budget:
-        video_frames.append(obs["rgb"][0].cpu().contiguous().numpy())
+        video_frames.append(video_cam.data.output["rgb"][0].cpu().contiguous().numpy())
 
     while episodes_done < target and step < safety_max_steps:
         with torch.no_grad():
@@ -137,7 +143,7 @@ def main():
         obs, done, info = env.step(action)
         step += 1
         if args_cli.video and len(video_frames) < video_budget:
-            video_frames.append(obs["rgb"][0].cpu().contiguous().numpy())
+            video_frames.append(video_cam.data.output["rgb"][0].cpu().contiguous().numpy())
 
         reset_ids = done.nonzero(as_tuple=True)[0]
         if len(reset_ids) > 0:
