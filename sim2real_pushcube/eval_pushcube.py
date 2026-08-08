@@ -28,6 +28,9 @@ parser.add_argument("--ckpt", type=str, required=True, help="path to a ppo_rgb.p
 parser.add_argument("--num_envs", type=int, default=8, help="number of parallel envs")
 parser.add_argument("--num_eval_episodes", type=int, default=50, help="total episodes to evaluate")
 parser.add_argument("--seed", type=int, default=0, help="random seed")
+parser.add_argument("--video", action="store_true", help="record env-0 rgb frames to a video file")
+parser.add_argument("--video_path", type=str, default="pushcube_eval.mp4", help="output video path")
+parser.add_argument("--video_episodes", type=int, default=3, help="number of env-0 episodes to record")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
@@ -44,6 +47,56 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from mani_skill_agent import build_agent
 from pushcube_isaaclab_env import PushCubeIsaacLabEnv
+
+
+def write_frames_to_video(frames, path, fps=20):
+    """Write a list of (H, W, 3) uint8 numpy frames to a video file.
+
+    Tries imageio (mp4) -> torchvision (mp4) -> PIL (animated gif) so it works
+    regardless of which video backend is installed in the container.
+    """
+    import numpy as np
+
+    arr = np.stack(frames)  # (T, H, W, 3) uint8
+
+    # 1) imageio mp4
+    try:
+        import imageio
+
+        writer = imageio.get_writer(path, fps=fps, codec="libx264", quality=8)
+        for f in arr:
+            writer.append_data(f)
+        writer.close()
+        print(f"[video] saved {len(arr)} frames to {path} (imageio mp4)", flush=True)
+        return
+    except Exception as e:
+        print(f"[video] imageio unavailable/failed ({e}); trying torchvision", flush=True)
+
+    # 2) torchvision mp4
+    try:
+        import torch as _t
+        from torchvision.io import write_video
+
+        write_video(path, _t.from_numpy(arr).permute(0, 3, 1, 2), fps=fps)
+        print(f"[video] saved {len(arr)} frames to {path} (torchvision mp4)", flush=True)
+        return
+    except Exception as e:
+        print(f"[video] torchvision unavailable/failed ({e}); falling back to GIF", flush=True)
+
+    # 3) PIL animated gif (always works if Pillow is installed)
+    try:
+        from PIL import Image
+
+        gif_path = path[:-4] + ".gif" if path.lower().endswith(".mp4") else path
+        imgs = [Image.fromarray(f) for f in arr]
+        imgs[0].save(
+            gif_path, save_all=True, append_images=imgs[1:],
+            duration=int(1000 / fps), loop=0,
+        )
+        print(f"[video] saved {len(arr)} frames to {gif_path} (PIL gif)", flush=True)
+        return
+    except Exception as e:
+        print(f"[video] all video writers failed: {e}", flush=True)
 
 
 def main():
@@ -72,11 +125,19 @@ def main():
     safety_max_steps = target * (env.max_steps + 5) + 100
     step = 0
 
+    # video recording: collect env-0 rgb frames for the first few episodes
+    video_frames = []
+    video_budget = args_cli.video_episodes * env.max_steps if args_cli.video else 0
+    if args_cli.video and len(video_frames) < video_budget:
+        video_frames.append(obs["rgb"][0].cpu().contiguous().numpy())
+
     while episodes_done < target and step < safety_max_steps:
         with torch.no_grad():
             action = agent.get_action(obs, deterministic=True)  # (N,8)
         obs, done, info = env.step(action)
         step += 1
+        if args_cli.video and len(video_frames) < video_budget:
+            video_frames.append(obs["rgb"][0].cpu().contiguous().numpy())
 
         reset_ids = done.nonzero(as_tuple=True)[0]
         if len(reset_ids) > 0:
@@ -99,6 +160,9 @@ def main():
     else:
         print("Eval result: 0 episodes completed (check that episodes terminate).")
     print("=" * 60)
+
+    if args_cli.video and video_frames:
+        write_frames_to_video(video_frames, args_cli.video_path)
 
     env.close()
     simulation_app.close()
