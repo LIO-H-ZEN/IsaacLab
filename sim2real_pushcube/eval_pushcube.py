@@ -24,7 +24,9 @@ from isaaclab.app import AppLauncher
 
 # --- argparse + AppLauncher MUST come before any isaaclab.* import ---
 parser = argparse.ArgumentParser(description="Evaluate ManiSkill PushCube ckpt in IsaacLab")
-parser.add_argument("--ckpt", type=str, required=True, help="path to a ppo_rgb.py .pt checkpoint (state_dict)")
+parser.add_argument("--ckpt", type=str, required=True, help="path to a ppo .pt checkpoint (state_dict)")
+parser.add_argument("--obs_mode", choices=["state", "rgb"], default="rgb",
+                    help="policy obs mode: 'state' (ppo.py MLP, 35-dim state) or 'rgb' (ppo_rgb.py NatureCNN)")
 parser.add_argument("--num_envs", type=int, default=8, help="number of parallel envs")
 parser.add_argument("--num_eval_episodes", type=int, default=50, help="total episodes to evaluate")
 parser.add_argument("--seed", type=int, default=0, help="random seed")
@@ -50,7 +52,7 @@ import torch
 # make sibling modules (mani_skill_agent, pushcube_isaaclab_env) importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from mani_skill_agent import build_agent
+from mani_skill_agent import build_agent, build_state_agent
 from pushcube_isaaclab_env import PushCubeIsaacLabEnv
 
 
@@ -108,19 +110,25 @@ def main():
     torch.manual_seed(args_cli.seed)
     device = args_cli.device
 
-    # build env + load policy
-    print("[eval] building env...", flush=True)
-    env = PushCubeIsaacLabEnv(num_envs=args_cli.num_envs, device=device)
+    obs_mode = args_cli.obs_mode
+    print(f"[eval] building env (obs_mode={obs_mode})...", flush=True)
+    env = PushCubeIsaacLabEnv(num_envs=args_cli.num_envs, device=device, obs_mode=obs_mode,
+                              video=args_cli.video)
     print("[eval] loading policy checkpoint...", flush=True)
-    agent = build_agent(
-        ckpt_path=args_cli.ckpt,
-        num_envs=args_cli.num_envs,
-        device=torch.device(device),
-        rgb_shape=(128, 128, 3),
-        state_dim=25,
-        action_dim=8,
-    )
-    print(f"[eval] env ready ({args_cli.num_envs} envs), policy loaded from {args_cli.ckpt}", flush=True)
+    if obs_mode == "state":
+        agent = build_state_agent(
+            ckpt_path=args_cli.ckpt, device=torch.device(device), state_dim=35, action_dim=8,
+        )
+    else:
+        agent = build_agent(
+            ckpt_path=args_cli.ckpt,
+            num_envs=args_cli.num_envs,
+            device=torch.device(device),
+            rgb_shape=(128, 128, 3),
+            state_dim=25,
+            action_dim=8,
+        )
+    print(f"[eval] env ready ({args_cli.num_envs} envs, obs_mode={obs_mode}), policy loaded from {args_cli.ckpt}", flush=True)
 
     obs = env.reset()
     episodes_done = 0
@@ -139,7 +147,8 @@ def main():
 
     while episodes_done < target and step < safety_max_steps:
         with torch.no_grad():
-            action = agent.get_action(obs, deterministic=True)  # (N,8)
+            agent_input = obs["state"] if obs_mode == "state" else obs
+            action = agent.get_action(agent_input, deterministic=True)  # (N,8)
         obs, done, info = env.step(action)
         step += 1
         if args_cli.video and len(video_frames) < video_budget:

@@ -153,3 +153,63 @@ def build_agent(
     agent.load_state_dict(state_dict)
     agent.eval()
     return agent
+
+
+class StateAgent(nn.Module):
+    """State-based PPO agent (ManiSkill ``ppo.py``): a 3-hidden-layer MLP (256)
+    with ``Tanh`` activations. Input is the flat state vector (35-dim for
+    PushCube-v1 under obs_mode="state"). Keys: ``critic.{0,2,4,6}.*``,
+    ``actor_mean.{0,2,4,6}.*``, ``actor_logstd`` (Tanh layers have no params)."""
+
+    def __init__(self, state_dim: int, action_dim: int):
+        super().__init__()
+        self.critic = nn.Sequential(
+            layer_init(nn.Linear(state_dim, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, 1)),
+        )
+        self.actor_mean = nn.Sequential(
+            layer_init(nn.Linear(state_dim, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, 256)),
+            nn.Tanh(),
+            layer_init(nn.Linear(256, action_dim), std=0.01 * np.sqrt(2)),
+        )
+        self.actor_logstd = nn.Parameter(torch.ones(1, action_dim) * -0.5)
+
+    def get_value(self, x):
+        return self.critic(x)
+
+    @torch.no_grad()
+    def get_action(self, x, deterministic: bool = True):
+        """x: state tensor (N, state_dim). Deterministic returns actor_mean."""
+        return self.actor_mean(x)
+
+    def get_action_and_value(self, x, action=None):
+        action_mean = self.actor_mean(x)
+        action_logstd = self.actor_logstd.expand_as(action_mean)
+        action_std = torch.exp(action_logstd)
+        probs = Normal(action_mean, action_std)
+        if action is None:
+            action = probs.sample()
+        return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
+
+
+def build_state_agent(
+    ckpt_path: str,
+    device: torch.device,
+    state_dim: int = 35,
+    action_dim: int = 8,
+) -> StateAgent:
+    """Build the state-based Agent and load the ManiSkill state_dict (saved by ppo.py)."""
+    agent = StateAgent(state_dim=state_dim, action_dim=action_dim).to(device)
+    state_dict = torch.load(ckpt_path, map_location=device)
+    agent.load_state_dict(state_dict)
+    agent.eval()
+    return agent

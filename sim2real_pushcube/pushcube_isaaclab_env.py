@@ -205,10 +205,12 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
 class PushCubeIsaacLabEnv:
     """Standalone IsaacLab PushCube env matching the ManiSkill PushCube-v1 contract."""
 
-    def __init__(self, num_envs: int, device: str, sim_dt: float = SIM_DT,
-                 decimation: int = DECIMATION, max_steps: int = MAX_STEPS):
+    def __init__(self, num_envs: int, device: str, obs_mode: str = "rgb", video: bool = False,
+                 sim_dt: float = SIM_DT, decimation: int = DECIMATION, max_steps: int = MAX_STEPS):
         self.num_envs = num_envs
         self.device = torch.device(device)
+        self.obs_mode = obs_mode
+        self.video = video
         self.sim_dt = sim_dt
         self.decimation = decimation
         self.max_steps = max_steps
@@ -242,6 +244,12 @@ class PushCubeIsaacLabEnv:
             robot_cfg.actuators[grp].stiffness = 1e3
             robot_cfg.actuators[grp].damping = 1e2
             robot_cfg.actuators[grp].effort_limit_sim = 100.0
+        if self.obs_mode == "state":
+            # state mode never reads the policy camera; keep cameras (they still
+            # need --enable_cameras to init) but skip rendering unless recording video.
+            scene_cfg.camera.update_period = 1e6
+            if not self.video:
+                scene_cfg.camera_render.update_period = 1e6
         self.scene = InteractiveScene(scene_cfg)
         print("[env] sim.reset()...", flush=True)
         self.sim.reset()
@@ -289,24 +297,33 @@ class PushCubeIsaacLabEnv:
 
     # ------------------------------------------------------------------ obs
     def get_obs(self) -> dict:
-        rgb = self.camera.data.output["rgb"].torch[..., :3].contiguous()  # (N,128,128,3) uint8
-
+        # ManiSkill (parallel_in_single_scene=False) reports per-env LOCAL poses,
+        # so subtract env_origins from world positions. Quats are unchanged by translation.
+        origins = self.scene.env_origins  # (N,3)
         qpos = self.robot.data.joint_pos.torch[:, self.joint_idx]   # (N,9)
         qvel = self.robot.data.joint_vel.torch[:, self.joint_idx]   # (N,9)
 
-        # tcp pose = panda_hand link pose + [0,0,0.1034] offset (IsaacLab quat is xyzw)
-        hand_pose = self.robot.data.body_link_pose_w.torch[:, self.hand_body_idx]  # (N,7) [xyz, xyzw]
-        hand_pos = hand_pose[:, :3]
+        # tcp pose (env-local): panda_hand world pose + [0,0,0.1034] offset, minus env_origin
+        hand_pose = self.robot.data.body_link_pose_w.torch[:, self.hand_body_idx]  # (N,7) world [xyz, xyzw]
         hand_quat_xyzw = hand_pose[:, 3:7]
-        tcp_pos = hand_pos + math_utils.quat_apply(hand_quat_xyzw, self.tcp_offset.expand(self.num_envs, 3))
+        tcp_pos = hand_pose[:, :3] + math_utils.quat_apply(
+            hand_quat_xyzw, self.tcp_offset.expand(self.num_envs, 3)
+        ) - origins
         tcp_quat_wxyz = hand_quat_xyzw[:, [3, 0, 1, 2]]  # xyzw -> wxyz
-        tcp_pose = torch.cat([tcp_pos, tcp_quat_wxyz], dim=1)  # (N,7)
+        tcp_pose = torch.cat([tcp_pos, tcp_quat_wxyz], dim=1)  # (N,7) local
 
-        # ManiSkill rgb-mode state = [qpos(9), qvel(9), tcp_pose(7)] = 25.
-        # goal_pos / obj_pose are NOT in the state under obs_mode="rgb" (the
-        # policy reads them from the rgb image). Verified against the ckpt
-        # (feature_net.extractors.state.weight is [256, 25]).
-        state = torch.cat([qpos, qvel, tcp_pose], dim=1)  # (N,25)
+        if self.obs_mode == "state":
+            # state mode: [qpos(9), qvel(9), tcp_pose(7), goal_pos(3), obj_pose(7)] = 35
+            obj_pos = self.cube.data.root_pos_w.torch - origins  # local
+            obj_quat_wxyz = self.cube.data.root_quat_w.torch[:, [3, 0, 1, 2]]
+            obj_pose = torch.cat([obj_pos, obj_quat_wxyz], dim=1)  # (N,7) local
+            goal_pos = self.goal_pos - origins  # local (goal_pos stored in world frame)
+            state = torch.cat([qpos, qvel, tcp_pose, goal_pos, obj_pose], dim=1)  # (N,35)
+            return {"state": state}
+
+        # rgb mode: [qpos(9), qvel(9), tcp_pose(7)] = 25 (+ rgb image)
+        rgb = self.camera.data.output["rgb"].torch[..., :3].contiguous()  # (N,128,128,3) uint8
+        state = torch.cat([qpos, qvel, tcp_pose], dim=1)  # (N,25) local
         return {"rgb": rgb, "state": state}
 
     # --------------------------------------------------------------- success
@@ -390,7 +407,7 @@ class PushCubeIsaacLabEnv:
         goal_xy = cube_xy.clone()
         goal_xy[:, 0] = goal_xy[:, 0] + GOAL_DX
         self.goal_pos[env_ids] = self.scene.env_origins[env_ids] + torch.cat(
-            [goal_xy, torch.zeros((n, 1), device=self.device)], dim=1
+            [goal_xy, torch.full((n, 1), GOAL_Z, device=self.device)], dim=1
         )
 
         # move the red/white goal target discs to goal_pos (world frame); all 5 share one pose
