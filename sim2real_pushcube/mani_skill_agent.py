@@ -7,9 +7,9 @@ Faithful re-implementation of the ``Agent`` / ``NatureCNN`` defined in
 is kept identical to the original.
 
 Contract (derived from ManiSkill PushCube-v1 + ppo_rgb.py):
-- obs is a dict: ``{"rgb": uint8[N,128,128,3] (HWC), "state": float32[N,35]}``
+- obs is a dict: ``{"rgb": uint8[N,128,128,3] (HWC), "state": float32[N,25]}``
 - rgb is normalized by /255 inside the network.
-- state order: [qpos(9), qvel(9), tcp_pose(7), goal_pos(3), obj_pose(7)] = 35.
+- state order: [qpos(9), qvel(9), tcp_pose(7, wxyz)] = 25  (rgb mode; goal/obj from image).
 - action: float32[N,8] = [arm_delta(7), gripper_abs_target(1)].
 """
 from __future__ import annotations
@@ -125,7 +125,7 @@ def build_agent(
     num_envs: int,
     device: torch.device,
     rgb_shape=(128, 128, 3),
-    state_dim: int = 35,
+    state_dim: int = 25,
     action_dim: int = 8,
 ) -> Agent:
     """Build the Agent with dummy sample obs and load the ManiSkill state_dict.

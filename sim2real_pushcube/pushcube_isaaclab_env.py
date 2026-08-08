@@ -6,12 +6,11 @@ ManiSkill exactly, which is required for the ManiSkill-trained checkpoint to be
 loaded and evaluated here.
 
 Contract (must match ManiSkill PushCube-v1 + ppo_rgb.py):
-- obs: dict ``{"rgb": uint8[N,128,128,3] (HWC), "state": float32[N,35]}``
-  state order = [qpos(9), qvel(9), tcp_pose(7, wxyz), goal_pos(3), obj_pose(7, wxyz)]
+- obs: dict ``{"rgb": uint8[N,128,128,3] (HWC), "state": float32[N,25]}``
+  state order = [qpos(9), qvel(9), tcp_pose(7, wxyz)]  (=25; under ManiSkill obs_mode="rgb"
+  the goal/object are read from the image, not the state vector)
     qpos/qvel in ManiSkill joint order: panda_joint1..7, panda_finger_joint1,2
     tcp_pose = panda_hand link pose + [0,0,0.1034] offset  (wxyz quaternion)
-    goal_pos = cube_xy + [0.2, 0, 0]  (world frame)
-    obj_pose = cube root pose (wxyz quaternion)
 - action: float32[N,8] = [arm_delta(7) in [-0.1,0.1], gripper_abs_target(1) in [-0.01,0.04]]
     arm:  target = current_arm_qpos + clip(action[:7], -0.1, 0.1)   (pd_joint_delta_pos)
     grip: target = clip(action[7], -0.01, 0.04) applied to BOTH fingers (mimic)
@@ -195,14 +194,11 @@ class PushCubeIsaacLabEnv:
         tcp_quat_wxyz = hand_quat_xyzw[:, [3, 0, 1, 2]]  # xyzw -> wxyz
         tcp_pose = torch.cat([tcp_pos, tcp_quat_wxyz], dim=1)  # (N,7)
 
-        # object pose (world); convert xyzw -> wxyz
-        obj_pos = self.cube.data.root_pos_w.torch                  # (N,3)
-        obj_quat_xyzw = self.cube.data.root_quat_w.torch           # (N,4)
-        obj_quat_wxyz = obj_quat_xyzw[:, [3, 0, 1, 2]]
-        obj_pose = torch.cat([obj_pos, obj_quat_wxyz], dim=1)      # (N,7)
-
-        # goal_pos is stored in world frame
-        state = torch.cat([qpos, qvel, tcp_pose, self.goal_pos, obj_pose], dim=1)  # (N,35)
+        # ManiSkill rgb-mode state = [qpos(9), qvel(9), tcp_pose(7)] = 25.
+        # goal_pos / obj_pose are NOT in the state under obs_mode="rgb" (the
+        # policy reads them from the rgb image). Verified against the ckpt
+        # (feature_net.extractors.state.weight is [256, 25]).
+        state = torch.cat([qpos, qvel, tcp_pose], dim=1)  # (N,25)
         return {"rgb": rgb, "state": state}
 
     # --------------------------------------------------------------- success

@@ -59,7 +59,7 @@ def main():
         num_envs=args_cli.num_envs,
         device=torch.device(device),
         rgb_shape=(128, 128, 3),
-        state_dim=35,
+        state_dim=25,
         action_dim=8,
     )
     print(f"[eval] env ready ({args_cli.num_envs} envs), policy loaded from {args_cli.ckpt}", flush=True)
