@@ -55,6 +55,13 @@ ARM_NAMES = [f"panda_joint{i}" for i in range(1, 8)]
 FINGER_NAMES = ["panda_finger_joint1", "panda_finger_joint2"]
 # ManiSkill cube color (12, 42, 160) / 255
 CUBE_COLOR = (12 / 255, 42 / 255, 160 / 255)
+# ManiSkill red/white goal target (build_red_white_target): 5 concentric discs
+TARGET_RED = (194 / 255, 19 / 255, 22 / 255)
+TARGET_WHITE = (1.0, 1.0, 1.0)
+GOAL_DISC_RADII = (0.1, 0.08, 0.06, 0.04, 0.02)       # r, 4r/5, 3r/5, 2r/5, r/5
+GOAL_DISC_HEIGHTS = (1e-5, 3e-5, 5e-5, 7e-5, 9e-5)     # increasing so smaller discs sit on top
+GOAL_DISC_COLORS = (TARGET_RED, TARGET_WHITE, TARGET_RED, TARGET_WHITE, TARGET_RED)
+GOAL_Z = 1e-3  # target sits just above the table surface (z=0)
 
 
 @configclass
@@ -80,6 +87,54 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
             mass_props=sim_utils.MassPropertiesCfg(mass=0.1),  # TODO: match ManiSkill cube mass
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=CUBE_COLOR),
+        ),
+    )
+
+    # --- goal target: 5 concentric red/white discs (visual only, kinematic),
+    #     moved to goal_pos each reset. Mirrors ManiSkill build_red_white_target. ---
+    goal_d0: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalD0",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
+        spawn=sim_utils.CylinderCfg(
+            radius=GOAL_DISC_RADII[0], height=GOAL_DISC_HEIGHTS[0], axis="Z",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[0]),
+        ),
+    )
+    goal_d1: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalD1",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
+        spawn=sim_utils.CylinderCfg(
+            radius=GOAL_DISC_RADII[1], height=GOAL_DISC_HEIGHTS[1], axis="Z",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[1]),
+        ),
+    )
+    goal_d2: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalD2",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
+        spawn=sim_utils.CylinderCfg(
+            radius=GOAL_DISC_RADII[2], height=GOAL_DISC_HEIGHTS[2], axis="Z",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[2]),
+        ),
+    )
+    goal_d3: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalD3",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
+        spawn=sim_utils.CylinderCfg(
+            radius=GOAL_DISC_RADII[3], height=GOAL_DISC_HEIGHTS[3], axis="Z",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[3]),
+        ),
+    )
+    goal_d4: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/GoalD4",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
+        spawn=sim_utils.CylinderCfg(
+            radius=GOAL_DISC_RADII[4], height=GOAL_DISC_HEIGHTS[4], axis="Z",
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[4]),
         ),
     )
 
@@ -149,6 +204,7 @@ class PushCubeIsaacLabEnv:
         self.robot = self.scene["robot"]
         self.cube = self.scene["object"]
         self.camera = self.scene["camera"]
+        self.goal_discs = [self.scene[f"goal_d{i}"] for i in range(5)]
 
         # camera pose = sapien look_at(eye=[0.3,0,0.6], target=[-0.1,0,0.1]), per env (world frame)
         print("[env] setting camera view...", flush=True)
@@ -282,6 +338,17 @@ class PushCubeIsaacLabEnv:
         self.goal_pos[env_ids] = self.scene.env_origins[env_ids] + torch.cat(
             [cube_xy + GOAL_DX, torch.zeros((n, 1), device=self.device)], dim=1
         )
+
+        # move the red/white goal target discs to goal_pos (world frame); all 5 share one pose
+        goal_world = self.scene.env_origins[env_ids] + torch.cat(
+            [cube_xy + GOAL_DX, torch.full((n, 1), GOAL_Z, device=self.device)], dim=1
+        )
+        goal_root = torch.cat([goal_world, ident_xyzw], dim=1)  # (n,7) [xyz, xyzw]
+        for disc in self.goal_discs:
+            disc.write_root_pose_to_sim_index(root_pose=goal_root, env_ids=env_ids)
+            disc.write_root_velocity_to_sim_index(
+                root_velocity=torch.zeros((n, 6), device=self.device), env_ids=env_ids
+            )
 
         # counters
         self.step_count[env_ids] = 0
