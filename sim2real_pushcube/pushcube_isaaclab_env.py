@@ -90,7 +90,6 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.CuboidCfg(
             size=TABLE_SIZE,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=TABLE_COLOR),
@@ -387,14 +386,16 @@ class PushCubeIsaacLabEnv:
             root_velocity=torch.zeros((n, 6), device=self.device), env_ids=env_ids
         )
 
-        # goal (world): cube_xy + [GOAL_DX, 0, 0]
+        # goal (world): cube_xy + [GOAL_DX, 0]  (only +x, NOT +y -- cube_xy+scalar would shift both)
+        goal_xy = cube_xy.clone()
+        goal_xy[:, 0] = goal_xy[:, 0] + GOAL_DX
         self.goal_pos[env_ids] = self.scene.env_origins[env_ids] + torch.cat(
-            [cube_xy + GOAL_DX, torch.zeros((n, 1), device=self.device)], dim=1
+            [goal_xy, torch.zeros((n, 1), device=self.device)], dim=1
         )
 
         # move the red/white goal target discs to goal_pos (world frame); all 5 share one pose
         goal_world = self.scene.env_origins[env_ids] + torch.cat(
-            [cube_xy + GOAL_DX, torch.full((n, 1), GOAL_Z, device=self.device)], dim=1
+            [goal_xy, torch.full((n, 1), GOAL_Z, device=self.device)], dim=1
         )
         goal_root = torch.cat([goal_world, ident_xyzw], dim=1)  # (n,7) [xyz, xyzw]
         for disc in self.goal_discs:
