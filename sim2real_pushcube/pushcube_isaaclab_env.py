@@ -68,26 +68,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75)),
     )
 
-    # --- robot (Franka Panda, base shifted to match ManiSkill, stiff PD gains) ---
+    # --- robot (Franka Panda); base pose / rest qpos / PD gains set in PushCubeIsaacLabEnv.__init__ ---
     robot: ArticulationCfg = FRANKA_PANDA_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-    robot.init_state.pos = ROBOT_BASE
-    robot.init_state.joint_pos = {
-        "panda_joint1": 0.0,
-        "panda_joint2": np.pi / 8,
-        "panda_joint3": 0.0,
-        "panda_joint4": -np.pi * 5 / 8,
-        "panda_joint5": 0.0,
-        "panda_joint6": np.pi * 3 / 4,
-        "panda_joint7": np.pi / 4,
-        "panda_finger_joint1": 0.04,
-        "panda_finger_joint2": 0.04,
-    }
-    # deepcopy actuators so we don't mutate the global FRANKA_PANDA_CFG, then match ManiSkill gains
-    robot.actuators = copy.deepcopy(robot.actuators)
-    for _grp in ("panda_shoulder", "panda_forearm", "panda_hand"):
-        robot.actuators[_grp].stiffness = 1e3
-        robot.actuators[_grp].damping = 1e2
-        robot.actuators[_grp].effort_limit_sim = 100.0
 
     # --- object (4 cm rigid cube, blue, resting on ground at z=0.02) ---
     object: RigidObjectCfg = RigidObjectCfg(
@@ -138,6 +120,27 @@ class PushCubeIsaacLabEnv:
         # scene
         print("[env] building InteractiveScene (slow on first run)...", flush=True)
         scene_cfg = PushCubeSceneCfg(num_envs=num_envs, env_spacing=2.5)
+        # Configure the robot on the scene-cfg instance (NOT in the configclass body):
+        # a for-loop in the class body would leak its loop variable as a spurious
+        # scene entity ("Unknown asset config type for _grp: ...").
+        robot_cfg = scene_cfg.robot
+        robot_cfg.init_state.pos = ROBOT_BASE
+        robot_cfg.init_state.joint_pos = {
+            "panda_joint1": 0.0,
+            "panda_joint2": np.pi / 8,
+            "panda_joint3": 0.0,
+            "panda_joint4": -np.pi * 5 / 8,
+            "panda_joint5": 0.0,
+            "panda_joint6": np.pi * 3 / 4,
+            "panda_joint7": np.pi / 4,
+            "panda_finger_joint1": 0.04,
+            "panda_finger_joint2": 0.04,
+        }
+        robot_cfg.actuators = copy.deepcopy(robot_cfg.actuators)
+        for grp in ("panda_shoulder", "panda_forearm", "panda_hand"):
+            robot_cfg.actuators[grp].stiffness = 1e3
+            robot_cfg.actuators[grp].damping = 1e2
+            robot_cfg.actuators[grp].effort_limit_sim = 100.0
         self.scene = InteractiveScene(scene_cfg)
         print("[env] sim.reset()...", flush=True)
         self.sim.reset()
