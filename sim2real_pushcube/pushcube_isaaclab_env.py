@@ -59,7 +59,7 @@ CUBE_COLOR = (12 / 255, 42 / 255, 160 / 255)
 TARGET_RED = (194 / 255, 19 / 255, 22 / 255)
 TARGET_WHITE = (1.0, 1.0, 1.0)
 GOAL_DISC_RADII = (0.1, 0.08, 0.06, 0.04, 0.02)       # r, 4r/5, 3r/5, 2r/5, r/5
-GOAL_DISC_HEIGHTS = (1e-5, 3e-5, 5e-5, 7e-5, 9e-5)     # increasing so smaller discs sit on top
+GOAL_DISC_HEIGHTS = (1.0e-3, 1.1e-3, 1.2e-3, 1.3e-3, 1.4e-3)  # mm-scale so Isaac Sim renders them (ManiSkill uses ~1e-5 but SAPIEN renders thin geo)
 GOAL_DISC_COLORS = (TARGET_RED, TARGET_WHITE, TARGET_RED, TARGET_WHITE, TARGET_RED)
 GOAL_Z = 1e-3  # target sits just above the table surface (z=0)
 # ManiSkill table (TableSceneBuilder collision box): top surface at z=0
@@ -89,7 +89,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.12, 0.0, TABLE_CENTER_Z)),
         spawn=sim_utils.CuboidCfg(
             size=TABLE_SIZE,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
             collision_props=sim_utils.CollisionPropertiesCfg(),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=TABLE_COLOR),
@@ -123,7 +124,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
         spawn=sim_utils.CylinderCfg(
             radius=GOAL_DISC_RADII[0], height=GOAL_DISC_HEIGHTS[0], axis="Z",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[0]),
         ),
     )
@@ -132,7 +134,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
         spawn=sim_utils.CylinderCfg(
             radius=GOAL_DISC_RADII[1], height=GOAL_DISC_HEIGHTS[1], axis="Z",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[1]),
         ),
     )
@@ -141,7 +144,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
         spawn=sim_utils.CylinderCfg(
             radius=GOAL_DISC_RADII[2], height=GOAL_DISC_HEIGHTS[2], axis="Z",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[2]),
         ),
     )
@@ -150,7 +154,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
         spawn=sim_utils.CylinderCfg(
             radius=GOAL_DISC_RADII[3], height=GOAL_DISC_HEIGHTS[3], axis="Z",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[3]),
         ),
     )
@@ -159,7 +164,8 @@ class PushCubeSceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(GOAL_DX, 0.0, GOAL_Z)),
         spawn=sim_utils.CylinderCfg(
             radius=GOAL_DISC_RADII[4], height=GOAL_DISC_HEIGHTS[4], axis="Z",
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True, disable_gravity=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=GOAL_DISC_COLORS[4]),
         ),
     )
