@@ -128,7 +128,8 @@ def main():
             state_dim=25,
             action_dim=8,
         )
-    print(f"[eval] env ready ({args_cli.num_envs} envs, obs_mode={obs_mode}), policy loaded from {args_cli.ckpt}", flush=True)
+    print(f"[eval] env ready ({args_cli.num_envs} envs, obs_mode={obs_mode}), "
+          f"policy loaded from {args_cli.ckpt}", flush=True)
 
     obs = env.reset()
     episodes_done = 0
