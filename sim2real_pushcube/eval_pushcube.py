@@ -51,7 +51,9 @@ def main():
     device = args_cli.device
 
     # build env + load policy
+    print("[eval] building env...", flush=True)
     env = PushCubeIsaacLabEnv(num_envs=args_cli.num_envs, device=device)
+    print("[eval] loading policy checkpoint...", flush=True)
     agent = build_agent(
         ckpt_path=args_cli.ckpt,
         num_envs=args_cli.num_envs,
@@ -60,7 +62,7 @@ def main():
         state_dim=35,
         action_dim=8,
     )
-    print(f"[eval] env ready ({args_cli.num_envs} envs), policy loaded from {args_cli.ckpt}")
+    print(f"[eval] env ready ({args_cli.num_envs} envs), policy loaded from {args_cli.ckpt}", flush=True)
 
     obs = env.reset()
     episodes_done = 0

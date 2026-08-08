@@ -131,20 +131,25 @@ class PushCubeIsaacLabEnv:
         self.max_steps = max_steps
 
         # simulation
+        print("[env] creating SimulationContext...", flush=True)
         sim_cfg = sim_utils.SimulationCfg(device=device, dt=sim_dt)
         self.sim = SimulationContext(sim_cfg)
 
         # scene
+        print("[env] building InteractiveScene (slow on first run)...", flush=True)
         scene_cfg = PushCubeSceneCfg(num_envs=num_envs, env_spacing=2.5)
         self.scene = InteractiveScene(scene_cfg)
+        print("[env] sim.reset()...", flush=True)
         self.sim.reset()
 
         # entities
+        print("[env] resolving entities...", flush=True)
         self.robot = self.scene["robot"]
         self.cube = self.scene["object"]
         self.camera = self.scene["camera"]
 
         # camera pose = sapien look_at(eye=[0.3,0,0.6], target=[-0.1,0,0.1]), per env (world frame)
+        print("[env] setting camera view...", flush=True)
         eye = self.scene.env_origins + torch.tensor([0.3, 0.0, 0.6], device=self.device)
         target = self.scene.env_origins + torch.tensor([-0.1, 0.0, 0.1], device=self.device)
         self.camera.set_world_poses_from_view(eye, target)
@@ -166,9 +171,11 @@ class PushCubeIsaacLabEnv:
         self.goal_pos = torch.zeros(num_envs, 3, device=self.device)
 
         # prime one step so the camera has rendered before the first obs
+        print("[env] priming camera (one sim step)...", flush=True)
         self.scene.write_data_to_sim()
         self.sim.step()
         self.scene.update(self.sim_dt)
+        print("[env] ready.", flush=True)
 
     # ------------------------------------------------------------------ obs
     def get_obs(self) -> dict:
