@@ -62,13 +62,34 @@ GOAL_DISC_RADII = (0.1, 0.08, 0.06, 0.04, 0.02)       # r, 4r/5, 3r/5, 2r/5, r/5
 GOAL_DISC_HEIGHTS = (1e-5, 3e-5, 5e-5, 7e-5, 9e-5)     # increasing so smaller discs sit on top
 GOAL_DISC_COLORS = (TARGET_RED, TARGET_WHITE, TARGET_RED, TARGET_WHITE, TARGET_RED)
 GOAL_Z = 1e-3  # target sits just above the table surface (z=0)
+# ManiSkill table (TableSceneBuilder collision box): top surface at z=0
+TABLE_SIZE = (2.418, 1.209, 0.9196429)
+TABLE_CENTER_Z = -0.9196429 / 2  # center z so the top face is at z=0
+TABLE_COLOR = (0.55, 0.4, 0.25)  # approximate wood brown (ManiSkill uses table.glb; tune to match)
+FLOOR_Z = -0.92  # ground plane (floor) below the table
 
 
 @configclass
 class PushCubeSceneCfg(InteractiveSceneCfg):
     """Scene: ground (= table surface at z=0), Franka Panda, 4cm cube, one 128x128 camera."""
 
-    ground = AssetBaseCfg(prim_path="/World/GroundPlane", spawn=sim_utils.GroundPlaneCfg())
+    ground = AssetBaseCfg(
+        prim_path="/World/GroundPlane",
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, FLOOR_Z)),  # floor below the table
+        spawn=sim_utils.GroundPlaneCfg(),
+    )
+    # --- table (brown box, top surface at z=0; mirrors ManiSkill TableSceneBuilder) ---
+    table: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Table",
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.12, 0.0, TABLE_CENTER_Z)),
+        spawn=sim_utils.CuboidCfg(
+            size=TABLE_SIZE,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=TABLE_COLOR),
+        ),
+    )
     light = AssetBaseCfg(
         prim_path="/World/Light",
         spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75)),
